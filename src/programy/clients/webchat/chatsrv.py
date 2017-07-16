@@ -2,7 +2,7 @@ import logging
 
 from flask import Flask, jsonify, request, make_response, abort, current_app
 from programy.clients.client import BotClient
-from programy.config.client.webchat import WebChatClientConfiguration
+from programy.config.sections.client.webchat import WebChatConfiguration
 
 class WebChatBotClient(BotClient):
 
@@ -13,7 +13,7 @@ class WebChatBotClient(BotClient):
         self.bot.brain.predicates.pairs.append(["env", "REST"])
 
     def get_client_configuration(self):
-        return WebChatClientConfiguration()
+        return WebChatConfiguration()
 
 print("Loading, please wait...")
 webchat_client = WebChatBotClient()

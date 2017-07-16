@@ -17,6 +17,12 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR TH
 import logging
 from flask import Flask, jsonify, request, make_response, abort
 
+
+from sanic import Sanic
+from sanic.response import json
+from sanic.exceptions import ServerError
+
+
 from programy.clients.client import BotClient
 from programy.config.sections.client.rest import RestConfiguration
 
@@ -31,14 +37,16 @@ class RestBotClient(BotClient):
     def get_client_configuration(self):
         return RestConfiguration()
 
-rest_client = None
+rest_client = RestBotClient()
 
 print("Initiating REST Service...")
-app = Flask(__name__)
+#app = Flask(__name__)
+app = Sanic(__name__)
 
 # Enter you API keys, here, alternatively store in a db or file and load at startup
 # This is an exmaple, and therefore not suitable for production
 api_keys = [
+    'asd90324klvxckljvkljdsfkl34nmrlkdsxckl'
 ]
 
 def is_apikey_valid(apikey):
@@ -52,31 +60,35 @@ def is_apikey_valid(apikey):
 # curl 'http://localhost:5000/api/v1.0/ask?question=hello+world&sessionid=1234567890'
 #
 @app.route('/api/v1.0/ask', methods=['GET'])
-def ask():
-
+async def ask(request):
+    
     if rest_client.configuration.client_configuration.use_api_keys is True:
         if 'apikey' not in request.args or request.args['apikey'] is None:
             logging.error("Unauthorised access - api required but missing")
-            return make_response(jsonify({'error': 'Unauthorized access'}), 401)
+            #return make_response(jsonify({'error': 'Unauthorized access'}), 401)
+            return json({'error': 'Unauthorized access'}, status=401)
 
         apikey = request.args['apikey']
         if is_apikey_valid(apikey) is False:
             logging.error("'Unauthorised access - invalid api key")
-            return make_response(jsonify({'error': 'Unauthorized access'}), 401)
+            #return make_response(jsonify({'error': 'Unauthorized access'}), 401)
+            return json({'error': 'Unauthorized access'}, status=401)
 
-    if 'question' not in request.args or request.args['question'] is None:
+    if 'question' not in request.args or request.args['question'][0] is None:
         print("'question' missing from request")
         logging.error("'question' missing from request")
-        abort(400)
+        #abort(400)
+        raise ServerError("Something bad happened", status_code=400)
 
-    question = request.args['question']
+    question = request.args['question'][0]
 
-    if 'sessionid' not in request.args or request.args['sessionid'] is None:
+    if 'sessionid' not in request.args or request.args['sessionid'][0] is None:
         print("'sessionid' missing from request")
         logging.error("'sessionid' missing from request")
-        abort(400)
+        #abort(400)
+        raise ServerError("Something bad happened", status_code=400)
 
-    sessionid = request.args['sessionid']
+    sessionid = request.args['sessionid'][0]
 
     try:
         response = rest_client.bot.ask_question(sessionid, question)
@@ -92,8 +104,9 @@ def ask():
                     "sessionid": sessionid
                    }
 
-        return jsonify({'response': response})
-
+        #return jsonify({'response': response})
+        return json({'response': response})
+    
     except Exception as excep:
 
         response = {"question": question,
@@ -102,7 +115,8 @@ def ask():
                     "error": str(excep)
                    }
 
-        return jsonify({'response': response})
+        #return jsonify({'response': response})
+        return json({'response': response})
 
 if __name__ == '__main__':
 
