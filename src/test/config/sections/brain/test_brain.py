@@ -26,7 +26,6 @@ class BrainConfigurationTests(unittest.TestCase):
                   pattern_nodes: $BOT_ROOT/config/pattern_nodes.conf
                   template_nodes: $BOT_ROOT/config/template_nodes.conf
             
-
                 binaries:
                   save_binary: false
                   load_binary: false
@@ -61,6 +60,22 @@ class BrainConfigurationTests(unittest.TestCase):
                     preprocessors: $BOT_ROOT/config/preprocessors.conf
                     postprocessors: $BOT_ROOT/config/postprocessors.conf
             
+                security:
+                    authentication:
+                        classname: programy.utils.security.authenticate.passthrough.PassThroughAuthenticationService
+                        denied_srai: AUTHENTICATION_FAILED
+                    authorisation:
+                        classname: programy.utils.security.authorise.passthrough.PassThroughAuthorisationService
+                        denied_srai: AUTHORISATION_FAILED
+
+                oob:
+                  default:
+                    classname: programy.utils.oob.default.DefaultOutOfBoundsProcessor
+                  dial:
+                    classname: programy.utils.oob.dial.DialOutOfBoundsProcessor
+                  email:
+                    classname: programy.utils.oob.email.EmailOutOfBoundsProcessor
+
                 services:
                     REST:
                         classname: programy.utils.services.rest.GenericRESTService
@@ -130,6 +145,16 @@ class BrainConfigurationTests(unittest.TestCase):
         self.assertEqual(brain_config.files.triples, "./config/triples.txt")
         self.assertEqual(brain_config.files.preprocessors, "./config/preprocessors.conf")
         self.assertEqual(brain_config.files.postprocessors, "./config/postprocessors.conf")
+
+        self.assertIsNotNone(brain_config.security)
+        self.assertIsNotNone(brain_config.security.authorisation)
+        self.assertIsNotNone(brain_config.security.authentication)
+
+        self.assertIsNotNone(brain_config.oob)
+        self.assertIsNotNone(brain_config.oob.oobs())
+        self.assertIsNotNone(brain_config.oob.default())
+        self.assertIsNotNone(brain_config.oob.oob("dial"))
+        self.assertIsNotNone(brain_config.oob.oob("email"))
 
         self.assertIsNotNone(brain_config.services)
         self.assertTrue(brain_config.services.exists("REST"))

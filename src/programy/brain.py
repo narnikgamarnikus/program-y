@@ -15,7 +15,8 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR TH
 """
 
 import logging
-
+import re
+import xml.etree.ElementTree as ET
 try:
     import _pickle as pickle
 except:
@@ -37,10 +38,11 @@ from programy.mappings.triples import TriplesCollection
 from programy.parser.aiml_parser import AIMLParser
 from programy.utils.services.service import ServiceFactory
 from programy.utils.text.text import TextUtils
+from programy.utils.classes.loader import ClassLoader
 import datetime
 
-class Brain(object):
 
+class Brain(object):
     def __init__(self, configuration: BrainConfiguration):
         self._configuration = configuration
         self._aiml_parser = AIMLParser(self)
@@ -59,6 +61,12 @@ class Brain(object):
 
         self._preprocessors = ProcessorLoader()
         self._postprocessors = ProcessorLoader()
+
+        self._authentication = None
+        self._authorisation = None
+
+        self._default_oob = None
+        self._oob = {}
 
         self.load(self._configuration)
 
@@ -122,6 +130,22 @@ class Brain(object):
     def postprocessors(self):
         return self._postprocessors
 
+    @property
+    def authentication(self):
+        return self._authentication
+
+    @property
+    def authorisation(self):
+        return self._authorisation
+
+    @property
+    def default_oob(self):
+        return self._default_oob
+
+    @property
+    def oobs(self):
+        return self._oob
+
     def load_binary(self, brain_configuration):
         logging.info("Loading binary brain from [%s]" % brain_configuration.binaries.binary_filename)
         try:
@@ -168,8 +192,15 @@ class Brain(object):
 
         logging.info("Loading collections")
         self.load_collections(brain_configuration)
+
         logging.info("Loading services")
         self.load_services(brain_configuration)
+
+        logging.info("Loading security services")
+        self.load_security_services(brain_configuration)
+
+        logging.info("Loading oob processors")
+        self.load_oob_processors(brain_configuration)
 
     def _load_denormals(self, brain_configuration):
         if brain_configuration.files.denormal is not None:
@@ -274,10 +305,42 @@ class Brain(object):
     def load_services(self, brain_configuration):
         ServiceFactory.preload_services(brain_configuration.services)
 
+    def load_security_services(self, brain_configuration):
+        if brain_configuration.security is not None:
+            if brain_configuration.security.authentication is not None:
+                if brain_configuration.security.authentication.classname is not None:
+                    try:
+                        classobject = ClassLoader.instantiate_class(
+                            brain_configuration.security.authentication.classname)
+                        self._authentication = classobject(brain_configuration.security.authentication)
+                    except Exception as excep:
+                        logging.exception(excep)
+            else:
+                logging.debug("No authentication configuration defined")
+
+            if brain_configuration.security.authorisation is not None:
+                if brain_configuration.security.authorisation.classname is not None:
+                    try:
+                        classobject = ClassLoader.instantiate_class(
+                            brain_configuration.security.authorisation.classname)
+                        self._authorisation = classobject(brain_configuration.security.authorisation)
+                    except Exception as excep:
+                        logging.exception(excep)
+            else:
+                logging.debug("No authorisation configuration defined")
+
+        else:
+            logging.debug("No security configuration defined, running open...")
+
     def pre_process_question(self, bot, clientid, question):
         return self.preprocessors.process(bot, clientid, question)
 
     def ask_question(self, bot, clientid, sentence) -> str:
+
+        if self.authentication is not None:
+            if self.authentication.authenticate(clientid) is False:
+                logging.error("[%s] failed authentication!")
+                return self.authentication.configuration.denied_srai
 
         conversation = bot.get_conversation(clientid)
 
@@ -305,18 +368,69 @@ class Brain(object):
             logging.info("No That pattern default to [*]")
             that_pattern = "*"
 
-        match_context =  self._aiml_parser.match_sentence(bot, clientid,
-                                                        sentence,
-                                                        topic_pattern=topic_pattern,
-                                                        that_pattern=that_pattern)
+        match_context = self._aiml_parser.match_sentence(bot, clientid,
+                                                         sentence,
+                                                         topic_pattern=topic_pattern,
+                                                         that_pattern=that_pattern)
 
         if match_context is not None:
             template_node = match_context.template_node()
             logging.debug("AIML Parser evaluating template [%s]", template_node.to_string())
             response = template_node.template.resolve(bot, clientid)
+            if "<oob>" in response:
+                response, oob = self.strip_oob(response)
+                if oob is not None:
+                    oob_response = self.process_oob(bot, clientid, oob)
+                    response = response + " " + oob_response
             return response
 
         return None
+
+    def load_oob_processors(self, brain_configuration):
+        if brain_configuration.oob is not None:
+            if brain_configuration.oob.default() is not None:
+                try:
+                    logging.info("Loading default oob")
+                    classobject = ClassLoader.instantiate_class(brain_configuration.oob.default().classname)
+                    self._default_oob = classobject()
+                except Exception as excep:
+                    logging.exception(excep)
+
+            for oob_name in  brain_configuration.oob.oobs():
+                try:
+                    logging.info("Loading oob: %s"%oob_name)
+                    classobject = ClassLoader.instantiate_class(brain_configuration.oob.oob(oob_name).classname)
+                    self._oob[oob_name] = classobject()
+                except Exception as excep:
+                    logging.exception(excep)
+
+    def strip_oob(self, response):
+        m = re.compile("(.*)(<\s*oob\s*>.*<\/\s*oob\s*>)(.*)")
+        g = m.match(response)
+        if g is not None:
+            front =  g.group(1).strip()
+            back = g.group(3).strip()
+            response = ""
+            if front != "":
+                response = front + " "
+            response += back
+            oob = g.group(2)
+            return response, oob
+        return response, None
+
+    def process_oob(self, bot, clientid, oob_command):
+
+        oob_content = ET.fromstring(oob_command)
+
+        if oob_content.tag == 'oob':
+            for tag in oob_content:
+                if tag in self._oob:
+                    oob_class = self._oob[tag]
+                    return oob_class.process_out_of_bounds(bot, clientid, tag)
+                else:
+                    return self._default_oob.process_out_of_bounds(bot, clientid, tag)
+
+        return ""
 
     def post_process_response(self, bot, clientid, response: str):
         return self.postprocessors.process(bot, clientid, response)

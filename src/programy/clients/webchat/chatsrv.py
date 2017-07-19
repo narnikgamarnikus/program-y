@@ -39,7 +39,7 @@ def is_apikey_valid(apikey):
 @app.route('/api/v1.0/ask', methods=['GET'])
 def ask():
 
-    if webchat_client.configuration.webchat_configuration.use_api_keys is True:
+    if webchat_client.configuration.client_configuration.use_api_keys is True:
         if 'apikey' not in request.args or request.args['apikey'] is None:
             logging.error("Unauthorised access - api required but missing")
             return make_response(jsonify({'error': 'Unauthorized access'}), 401)
@@ -91,14 +91,26 @@ def ask():
 
 if __name__ == '__main__':
 
-    def run():
-        print("REST Client running on %s:%s" % (webchat_client.configuration.webchat_configuration.host,
-                                                webchat_client.configuration.webchat_configuration.port))
-        if webchat_client.configuration.webchat_configuration.debug is True:
-            print("REST Client running in debug mode")
+    import os, signal, sys
 
-        app.run(host=webchat_client.configuration.webchat_configuration.host,
-                port=webchat_client.configuration.webchat_configuration.port,
-                debug=webchat_client.configuration.webchat_configuration.debug)
+    def set_exit_handler(func):
+        signal.signal(signal.SIGTERM, func)
+
+    def on_exit(sig, func=None):
+        print("exit handler triggered")
+        sys.exit(1)
+
+    def run():
+        print("WebChat Client running on %s:%s" % (webchat_client.configuration.client_configuration.host,
+                                                   webchat_client.configuration.client_configuration.port))
+        if webchat_client.configuration.client_configuration.debug is True:
+            print("WebChat Client running in debug mode")
+
+        app.run(host=webchat_client.configuration.client_configuration.host,
+                port=webchat_client.configuration.client_configuration.port,
+                debug=webchat_client.configuration.client_configuration.debug)
+
+
+    set_exit_handler(on_exit)
 
     run()
