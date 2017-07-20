@@ -25,7 +25,7 @@ brain:
     binaries:
       save_binary: false
       load_binary: false
-      binary_filename: /tmp/y-bot.brain
+      binary_filename: /tmp/my-bot.brain
       load_aiml_on_binary_fail: false
       dump_to_file: /tmp/braintree.txt
 
@@ -34,8 +34,8 @@ brain:
             files: $BOT_ROOT/aiml
             extension: .aiml
             directories: true
-            errors: /tmp/y-bot_errors.txt
-            duplicates: /tmp/y-bot_duplicates.txt
+            errors: /tmp/my-bot_errors.txt
+            duplicates: /tmp/my-bot_duplicates.txt
         sets:
             files: $BOT_ROOT/sets
             extension: .txt
